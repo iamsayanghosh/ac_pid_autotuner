@@ -194,26 +194,51 @@ def compute_metrics(time_list, temp_list, Tset, T_initial):
 
     rise_time     = None
     settling_time = None
-    settle_count  = 0
-    settle_needed = 50                  # consecutive samples inside band (~5 s)
+    
+    # Rise time (keep your existing definition)
+    # Standard 10–90% rise time
 
-    for i, (t, T) in enumerate(zip(time_list, temp_list)):
-        # Rise time: first crossing of the setpoint
-        if rise_time is None:
-            if cooling and T <= Tset:
-                rise_time = t
-            elif not cooling and T >= Tset:
-                rise_time = t
+    if cooling:
+        T10 = T_initial - 0.1 * total_change
+        T90 = T_initial - 0.9 * total_change
+    else:
+        T10 = T_initial + 0.1 * total_change
+        T90 = T_initial + 0.9 * total_change
 
-        # Settling time: first entry into the ±2% band that never leaves
-        if abs(T - Tset) <= band:
-            settle_count += 1
-            if settle_count >= settle_needed and settling_time is None:
-                # Record the time when the streak started
-                settling_time = time_list[i - settle_needed + 1]
-        else:
-            settle_count = 0            # Reset streak on any band exit
+    t10 = None
+    t90 = None
+    for t, T in zip(time_list, temp_list):
+        if t10 is None:
+            if (cooling and T <= T10) or (not cooling and T >= T10):
+                t10 = t
+        if t90 is None:
+            if (cooling and T <= T90) or (not cooling and T >= T90):
+                t90 = t
+                break
 
+    if t10 is not None and t90 is not None:
+        rise_time = t90 - t10
+    else:
+        rise_time = None
+
+    # Settling time: first time temperature enters and stays within the
+    # ±2% band for at least 50 consecutive samples (~5 s at dt=0.1)
+    settling_time = None
+    consec_required = 50
+    n = len(temp_list)
+    for i in range(n):
+        count = 0
+        for T in temp_list[i:]:
+            if abs(T - Tset) <= band:
+                count += 1
+                if count >= consec_required:
+                    settling_time = time_list[i]
+                    break
+            else:
+                break
+        if settling_time is not None:
+            break
+    
     # Overshoot: peak exceedance beyond the setpoint (% of total change)
     if cooling:
         # Undershoot = temp dips below Tset
@@ -222,10 +247,15 @@ def compute_metrics(time_list, temp_list, Tset, T_initial):
         # Overshoot = temp rises above Tset
         peak_error = max(temp_list) - Tset
 
-    overshoot_pct = max(0.0, (peak_error / total_change) * 100)
+    if total_change == 0:
+        overshoot_pct = 0.0
+    else:
+        overshoot_pct = max(0.0, (peak_error / total_change) * 100)
 
     return {
         'rise_time':     rise_time,
+        't90': t90,
+        't10': t10,
         'settling_time': settling_time,
         'overshoot_pct': overshoot_pct,
     }
@@ -341,9 +371,17 @@ if __name__ == "__main__":
     plt.plot(time_list, temp_list)
     plt.axhline(y=Tset, color='r', linestyle='--', label=f'Setpoint ({Tset}°C)')
     # Mark rise time and settling time on the temperature plot
-    if metrics['rise_time']:
-        plt.axvline(x=metrics['rise_time'], color='g', linestyle=':',
-                    label=f"Rise Time ({metrics['rise_time']:.1f}s)")
+    if metrics['t90'] is not None:
+        plt.axvline(x=metrics['t90'],
+                    color='g',
+                    linestyle=':',
+                    label=f"t90 = {metrics['t90']:.1f}s")
+
+    if metrics['t10'] is not None:
+        plt.axvline(x=metrics['t10'],
+                    color='purple',
+                    linestyle=':',
+                    label=f"t10 = {metrics['t10']:.1f}s")
     if metrics['settling_time']:
         plt.axvline(x=metrics['settling_time'], color='orange', linestyle=':',
                     label=f"Settling Time ({metrics['settling_time']:.1f}s)")
