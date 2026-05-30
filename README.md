@@ -89,12 +89,22 @@ Setpoint Temperature: **23°C**
 
 ## Simulation Output
 
-Insert the generated response plot here.
+The figure below shows the optimized PID controller response for a 23°C setpoint.
 
-Example:
+![PID Response](ac_pid_autotuner.png)
 
-![PID Response](images/final_response.png)
+### Observations
 
+- Optimized PID gains:
+  - Kp = 2.655
+  - Ki = 0.09584
+  - Kd = 0.56283
+- Rise Time: 4.10 s
+- Settling Time: 6.90 s
+- Overshoot: 0.084 %
+- Stable convergence to the setpoint
+- Minimal oscillation after settling
+- Fast reduction in tracking error
 ---
 
 ## Project Structure
